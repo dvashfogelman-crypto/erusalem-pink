@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#d4157a">
+<title>ירושלים בורוד – חלוקת ערכות</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik+Dirt&family=Rubik:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z' fill='%23d4157a'/%3E%3C/svg%3E">
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="hero-top"><img class="logo" src="/logo.png" alt="ירושלים בורוד – כי גילוי מוקדם מציל חיים"></div>
+    <div class="hero-pink">
+      <svg class="pink-ribbon" viewBox="0 0 100 140" aria-hidden="true"><path d="M50 8c-17 0-26 14-26 27 0 14 9 27 18 42L10 132l20 6 28-48 28 48 4-2-36-61c8-13 22-31 22-45C76 20 67 8 50 8zm0 14c8 0 12 6 12 13 0 8-7 19-12 27-5-8-12-19-12-27 0-7 4-13 12-13z"/></svg>
+      <h1>חלוקת ערכות</h1>
+      <p class="sub">עמדת המחלקות · יום שישי 30.10.26</p>
+    </div>
+  </header>
+
+  <section class="stats" aria-label="סיכום">
+    <div class="stat"><b id="sNames">0</b><span>נרשמות</span></div>
+    <div class="stat"><b id="sGiven">0</b><span>ערכות נמסרו</span></div>
+    <div class="stat"><b id="sLeft">0</b><span>נשארו</span></div>
+  </section>
+  <div class="bar" aria-hidden="true"><i id="progress"></i></div>
+
+  <div class="toolbar">
+    <input id="q" class="search" type="search" placeholder="🔍  חיפוש לפי שם או טלפון…" autocomplete="off" aria-label="חיפוש נרשמת">
+    <div class="chips" role="group" aria-label="סינון">
+      <button class="chip" data-f="all" aria-pressed="true">הכל</button>
+      <button class="chip" data-f="pending" aria-pressed="false">טרם קיבלו</button>
+      <button class="chip" data-f="done" aria-pressed="false">קיבלו</button>
+      <button class="me" id="meBtn" type="button"></button>
+    </div>
+    <div class="offline" id="offline">אין חיבור לשרת – מנסה שוב…</div>
+  </div>
+
+  <main id="list" class="list" aria-live="polite"></main>
+
+  <footer>המחלקה לקידום נשים והמחלקה לספורט בשכונות</footer>
+</div>
+
+<!-- התראה: כבר קיבלה -->
+<div class="overlay" id="alertBox" role="alertdialog" aria-modal="true" aria-labelledby="alertTitle">
+  <div class="sheet alert-sheet">
+    <div class="icon">!</div>
+    <h3 id="alertTitle"></h3>
+    <p id="alertText"></p>
+    <div class="actions"><button class="btn" data-close>הבנתי</button></div>
+  </div>
+</div>
+
+<!-- בחירת כמות -->
+<div class="overlay" id="qtyBox" role="dialog" aria-modal="true" aria-labelledby="qtyTitle">
+  <div class="sheet">
+    <h3 id="qtyTitle"></h3>
+    <p id="qtyText"></p>
+    <div class="qty">
+      <button type="button" id="qtyPlus" aria-label="הוספה">+</button>
+      <output id="qtyVal">1</output>
+      <button type="button" id="qtyMinus" aria-label="הפחתה">−</button>
+    </div>
+    <div class="actions">
+      <button class="btn" id="qtyOk">סמני מסירה</button>
+      <button class="btn ghost" data-close>ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- אישור ביטול -->
+<div class="overlay" id="undoBox" role="dialog" aria-modal="true" aria-labelledby="undoTitle">
+  <div class="sheet">
+    <h3 id="undoTitle">לבטל מסירה?</h3>
+    <p id="undoText"></p>
+    <div class="actions">
+      <button class="btn" id="undoOk">כן, לבטל ערכה אחת</button>
+      <button class="btn ghost" data-close>לא</button>
+    </div>
+  </div>
+</div>
+
+<!-- שם המחלקת -->
+<div class="overlay" id="meBox" role="dialog" aria-modal="true" aria-labelledby="meTitle">
+  <div class="sheet">
+    <h3 id="meTitle">היי! מה השם שלך?</h3>
+    <p>כדי שנדע מי מסרה כל ערכה</p>
+    <input type="text" id="meInput" maxlength="40" placeholder="השם שלך" autocomplete="given-name">
+    <div class="actions">
+      <button class="btn" id="meOk">יאללה מתחילות</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  let rows = [];
+  let lastText = '';
+  let filter = 'all';
+  let me = store.get('pinkVolunteer') || '';
+  let current = null; // הנרשמת שנבחרה בחלון פתוח
+
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const norm = s => String(s ?? '').toLowerCase().replace(/["'`׳״\-–.,]/g, '').replace(/\s+/g, ' ').trim();
+  const digits = s => String(s ?? '').replace(/\D/g, '');
+  const time = d => d ? new Date(d).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '';
+  const byWho = r => (r.last_by ? ` ע״י ${esc(r.last_by)}` : '') + (r.last_at ? ` בשעה ${time(r.last_at)}` : '');
+
+  function setMe(name) {
+    me = name.trim();
+    store.set('pinkVolunteer', me);
+    $('#meBtn').textContent = me ? `מחלקת: ${me} ✎` : 'מי מחלקת? ✎';
+  }
+  setMe(me);
+
+  // ===== טעינה ורענון אוטומטי =====
+  async function load() {
+    try {
+      const res = await fetch('/api/attendees', { cache: 'no-store' });
+      if (!res.ok) throw new Error();
+      const text = await res.text();
+      $('#offline').classList.remove('show');
+      if (text === lastText) return;
+      lastText = text;
+      rows = JSON.parse(text);
+      render();
+    } catch {
+      $('#offline').classList.add('show');
+    }
+  }
+
+  function upsert(row) {
+    const i = rows.findIndex(r => r.id === row.id);
+    if (i >= 0) rows[i] = row;
+    lastText = '';
+    render();
+  }
+
+  function render() {
+    const total = rows.reduce((s, r) => s + r.tickets, 0);
+    const given = rows.reduce((s, r) => s + r.received, 0);
+    $('#sNames').textContent = rows.length.toLocaleString('he-IL');
+    $('#sGiven').textContent = given.toLocaleString('he-IL');
+    $('#sLeft').textContent = (total - given).toLocaleString('he-IL');
+    $('#progress').style.width = total ? (given / total * 100) + '%' : '0';
+
+    if (!rows.length) {
+      $('#list').innerHTML = `<div class="empty"><h2>הרשימה עדיין ריקה</h2>מנהלת האירוע צריכה להעלות את קובץ האקסל של הנרשמות</div>`;
+      return;
+    }
+
+    const q = norm($('#q').value);
+    const qd = digits($('#q').value);
+    let shown = rows.filter(r => {
+      if (filter === 'pending' && r.received >= r.tickets) return false;
+      if (filter === 'done' && r.received === 0) return false;
+      if (!q) return true;
+      return norm(r.name).includes(q) || (qd.length >= 3 && digits(r.phone).includes(qd));
+    });
+    shown.sort((a, b) => a.name.localeCompare(b.name, 'he'));
+
+    if (!shown.length) {
+      $('#list').innerHTML = `<div class="empty"><h2>לא נמצאה</h2>נסי לחפש חלק מהשם או את הטלפון</div>`;
+      return;
+    }
+
+    $('#list').innerHTML = shown.slice(0, 300).map(r => {
+      const done = r.received >= r.tickets;
+      const cls = done ? 'done' : r.received > 0 ? 'partial' : '';
+      const dots = r.tickets > 1
+        ? `<span class="dots" aria-hidden="true">${Array.from({ length: Math.min(r.tickets, 10) }, (_, i) => `<i class="${i < r.received ? 'on' : ''}"></i>`).join('')}</span>`
+        : '';
+      const ticketsTxt = r.tickets > 1 ? `קיבלה ${r.received} מתוך ${r.tickets} ${dots}` : '';
+      const status = done
+        ? `✓ קיבלה${byWho(r)}`
+        : r.received > 0 ? `${ticketsTxt}` : (r.tickets > 1 ? `${r.tickets} כרטיסים ${dots}` : 'טרם קיבלה');
+      const phone = r.phone ? ` · ${esc(r.phone)}` : '';
+      const btn = done
+        ? `<button class="btn done" data-act="give" data-id="${r.id}" aria-label="${esc(r.name)} כבר קיבלה">✓ קיבלה</button>`
+        : `<button class="btn" data-act="give" data-id="${r.id}">${r.received > 0 ? '+ ערכה' : 'מסרתי ערכה'}</button>`;
+      const undo = r.received > 0 ? `<button class="undo" data-act="undo" data-id="${r.id}">ביטול</button>` : '';
+      return `<article class="card ${cls}">
+        <div class="info"><div class="name">${esc(r.name)}</div><div class="meta">${status}${phone}</div></div>
+        ${undo}${btn}
+      </article>`;
+    }).join('') + (shown.length > 300 ? `<div class="empty">מוצגות 300 ראשונות מתוך ${shown.length} – חפשי שם כדי לצמצם</div>` : '');
+  }
+
+  // ===== חלונות =====
+  function open(id) { document.getElementById(id).classList.add('open'); }
+  function closeAll() { document.querySelectorAll('.overlay').forEach(o => o.classList.remove('open')); }
+  document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
+    if (e.target === o || e.target.hasAttribute('data-close')) closeAll();
+  }));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAll(); });
+
+  let toastT;
+  function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+
+  function showAlert(r, extra) {
+    $('#alertTitle').textContent = extra ? 'רגע!' : 'כבר קיבלה ערכה!';
+    const amount = r.tickets > 1 ? `את כל ${r.tickets} הערכות שלה` : 'את הערכה';
+    $('#alertText').innerHTML = extra || `<b>${esc(r.name)}</b> כבר קיבלה ${amount}${byWho(r)}.<br>אי אפשר לסמן אותה שוב.`;
+    open('alertBox');
+    const s = document.querySelector('#alertBox .sheet');
+    s.classList.remove('shake'); void s.offsetWidth; s.classList.add('shake');
+    if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+  }
+
+  async function post(url, body) {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    return { status: res.status, data };
+  }
+
+  async function mark(id, qty) {
+    closeAll();
+    try {
+      const { status, data } = await post(`/api/attendees/${id}/mark`, { qty, by: me });
+      if (status === 200) {
+        upsert(data.row);
+        const r = data.row;
+        toast(r.tickets > 1 ? `✓ ${r.name} קיבלה ${r.received} מתוך ${r.tickets}` : `✓ נמסרה ערכה ל${r.name}`);
+      } else if (status === 409) {
+        upsert(data.row);
+        const r = data.row;
+        if (r.received >= r.tickets) showAlert(r);
+        else showAlert(r, `בינתיים מישהי אחרת סימנה ל<b>${esc(r.name)}</b> ערכות.<br>נשארו לה רק ${r.tickets - r.received} ערכות.`);
+      } else {
+        showAlert({}, esc(data.error || 'משהו השתבש, נסי שוב'));
+      }
+    } catch {
+      showAlert({}, 'אין חיבור לאינטרנט כרגע. הסימון לא נשמר – נסי שוב.');
+    }
+    load();
+  }
+
+  // ===== לחיצות על הרשימה =====
+  $('#list').addEventListener('click', e => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const r = rows.find(x => x.id === Number(b.dataset.id));
+    if (!r) return;
+    current = r;
+    if (b.dataset.act === 'undo') {
+      $('#undoText').innerHTML = `<b>${esc(r.name)}</b> מסומנת כמי שקיבלה ${r.received}${r.tickets > 1 ? ' מתוך ' + r.tickets : ''}. לבטל ערכה אחת?`;
+      open('undoBox');
+      return;
+    }
+    const left = r.tickets - r.received;
+    if (left <= 0) return showAlert(r);
+    if (left === 1) return mark(r.id, 1);
+    $('#qtyTitle').textContent = r.name;
+    $('#qtyText').textContent = `יש לה ${r.tickets} כרטיסים${r.received ? `, כבר קיבלה ${r.received}` : ''}. כמה ערכות מסרת עכשיו?`;
+    $('#qtyVal').value = left;
+    $('#qtyVal').textContent = left;
+    open('qtyBox');
+  });
+
+  const setQty = d => {
+    const left = current.tickets - current.received;
+    const v = Math.max(1, Math.min(left, Number($('#qtyVal').textContent) + d));
+    $('#qtyVal').textContent = v;
+  };
+  $('#qtyPlus').onclick = () => setQty(1);
+  $('#qtyMinus').onclick = () => setQty(-1);
+  $('#qtyOk').onclick = () => mark(current.id, Number($('#qtyVal').textContent));
+
+  $('#undoOk').onclick = async () => {
+    closeAll();
+    try {
+      const { status, data } = await post(`/api/attendees/${current.id}/unmark`, { by: me });
+      if (data.row) upsert(data.row);
+      toast(status === 200 ? `בוטלה ערכה אחת ל${data.row.name}` : 'לא היה מה לבטל');
+    } catch { toast('אין חיבור – נסי שוב'); }
+  };
+
+  // ===== חיפוש וסינון =====
+  $('#q').addEventListener('input', render);
+  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+    filter = c.dataset.f;
+    document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', String(x === c)));
+    render();
+  }));
+
+  // ===== שם המחלקת =====
+  $('#meBtn').onclick = () => { $('#meInput').value = me; open('meBox'); $('#meInput').focus(); };
+  $('#meOk').onclick = () => { setMe($('#meInput').value); closeAll(); };
+  $('#meInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#meOk').click(); });
+  if (!me) open('meBox');
+
+  load();
+  setInterval(() => { if (!document.hidden) load(); }, 4000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+})();
+</script>
+<svg class="skyline" viewBox="0 0 400 70" preserveAspectRatio="xMidYMax slice" aria-hidden="true"><path d="M0 70V52h14v-8h6v8h10V38l4-6 4 6v14h8V46h22v6h10V30h3v-6h4v6h3v22h16V40h4l2-4 2 4h4v12h10V48c0-14 10-24 22-24s22 10 22 24v4h8V20l3-8 3 8v32h12V44l6-3 6 3v8h14V42h4v-4h4v4h4v-4h4v4h4v10h16l-6-12 9 7 2-15 4 15 9-7-6 12h10V34l4-8 4 8v18h12v-8h4v-6h8v6h4v8h14V46h6v-6h4v6h6v6h12v18z"/></svg>
+</body>
+</html>

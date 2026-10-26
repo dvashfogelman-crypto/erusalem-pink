@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#d4157a">
+<title>ירושלים בורוד – ניהול</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik+Dirt&family=Rubik:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="hero-top"><img class="logo" src="/logo.png" alt="ירושלים בורוד – כי גילוי מוקדם מציל חיים"></div>
+    <div class="hero-pink">
+      <svg class="pink-ribbon" viewBox="0 0 100 140" aria-hidden="true"><path d="M50 8c-17 0-26 14-26 27 0 14 9 27 18 42L10 132l20 6 28-48 28 48 4-2-36-61c8-13 22-31 22-45C76 20 67 8 50 8zm0 14c8 0 12 6 12 13 0 8-7 19-12 27-5-8-12-19-12-27 0-7 4-13 12-13z"/></svg>
+      <h1>ניהול האירוע</h1>
+      <p class="sub">עמוד ניהול</p>
+    </div>
+  </header>
+
+  <section class="panel" id="login">
+    <h2>כניסת מנהלת</h2>
+    <p>הקלידי את סיסמת הניהול שהגדרת ב-Render</p>
+    <form id="loginForm">
+      <div class="sheet" style="box-shadow:none;padding:0;max-width:none;animation:none">
+        <input type="password" id="pw" placeholder="סיסמה" autocomplete="current-password" aria-label="סיסמה">
+      </div>
+      <button class="btn" type="submit">כניסה</button>
+    </form>
+    <div class="result err" id="loginErr"></div>
+  </section>
+
+  <div id="tools" hidden>
+    <section class="panel">
+      <h2>1. העלאת רשימת הנרשמות</h2>
+      <p>קובץ אקסל (xlsx / xls / csv) עם עמודה שהכותרת שלה כוללת <b>"שם"</b>, ועמודת <b>"כמות"</b> או <b>"כרטיסים"</b>. אפשר גם עמודת <b>"טלפון"</b>. אם אין עמודת כמות – כל נרשמת מקבלת ערכה אחת.<br><b>שימי לב:</b> העלאה מחליפה את כל הרשימה ומאפסת את הסימונים.</p>
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept=".xlsx,.xls,.csv">
+        📄 לחצי לבחירת קובץ האקסל
+      </label>
+      <div class="result" id="upRes"></div>
+    </section>
+
+    <section class="panel">
+      <h2>2. שיתוף הקישור</h2>
+      <p>שלחי למחלקות את הכתובת הזאת (בלי /admin):</p>
+      <div class="row-btns">
+        <input class="search" id="link" readonly style="font-size:15px" aria-label="קישור למחלקות">
+        <button class="btn ghost" id="copy">העתקה</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>3. בסוף האירוע</h2>
+      <p>הורדת אקסל עם מי קיבלה, כמה, מי מסרה ומתי.</p>
+      <div class="row-btns">
+        <button class="btn" id="export">⬇ הורדת אקסל מעודכן</button>
+        <button class="btn ghost" id="reset">איפוס כל הסימונים</button>
+      </div>
+      <div class="result" id="resetRes"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const ss = {
+    get(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch {} },
+  };
+  let pw = ss.get('pinkAdmin') || '';
+  const show = (el, html, err) => { el.innerHTML = html; el.classList.add('show'); el.classList.toggle('err', !!err); };
+
+  async function login(p) {
+    const r = await fetch('/api/admin/check', { method: 'POST', headers: { 'x-admin-password': p } });
+    if (!r.ok) return false;
+    pw = p; ss.set('pinkAdmin', p);
+    $('#login').hidden = true; $('#tools').hidden = false;
+    $('#link').value = location.origin;
+    return true;
+  }
+  if (pw) login(pw);
+
+  $('#loginForm').onsubmit = async e => {
+    e.preventDefault();
+    if (!(await login($('#pw').value))) show($('#loginErr'), 'סיסמה שגויה', true);
+  };
+
+  $('#file').onchange = async () => {
+    const f = $('#file').files[0];
+    if (!f) return;
+    if (!confirm(`להעלות את "${f.name}"?\nהרשימה הקיימת והסימונים יימחקו.`)) { $('#file').value = ''; return; }
+    show($('#upRes'), 'מעלה…');
+    const fd = new FormData(); fd.append('file', f);
+    try {
+      const r = await fetch('/api/admin/upload', { method: 'POST', headers: { 'x-admin-password': pw }, body: fd });
+      const d = await r.json();
+      if (!r.ok) return show($('#upRes'), d.error || 'שגיאה', true);
+      show($('#upRes'), `✅ נטענו <b>${d.count}</b> נרשמות (${d.tickets} ערכות בסה״כ)<br>
+        עמודת שם: ${d.columns.name}<br>עמודת כמות: ${d.columns.tickets}<br>עמודת טלפון: ${d.columns.phone}<br>
+        <a href="/" target="_blank">פתיחת עמוד החלוקה ←</a>`);
+    } catch { show($('#upRes'), 'אין חיבור לשרת', true); }
+    $('#file').value = '';
+  };
+
+  $('#copy').onclick = async () => {
+    try { await navigator.clipboard.writeText($('#link').value); $('#copy').textContent = 'הועתק ✓'; }
+    catch { $('#link').select(); }
+  };
+
+  $('#export').onclick = () => { location.href = '/api/admin/export?pw=' + encodeURIComponent(pw); };
+
+  $('#reset').onclick = async () => {
+    if (!confirm('לאפס את כל הסימונים? (הרשימה נשארת, רק הסימונים נמחקים)')) return;
+    const r = await fetch('/api/admin/reset', { method: 'POST', headers: { 'x-admin-password': pw } });
+    show($('#resetRes'), r.ok ? 'כל הסימונים אופסו' : 'שגיאה', !r.ok);
+  };
+})();
+</script>
+<svg class="skyline" viewBox="0 0 400 70" preserveAspectRatio="xMidYMax slice" aria-hidden="true"><path d="M0 70V52h14v-8h6v8h10V38l4-6 4 6v14h8V46h22v6h10V30h3v-6h4v6h3v22h16V40h4l2-4 2 4h4v12h10V48c0-14 10-24 22-24s22 10 22 24v4h8V20l3-8 3 8v32h12V44l6-3 6 3v8h14V42h4v-4h4v4h4v-4h4v4h4v10h16l-6-12 9 7 2-15 4 15 9-7-6 12h10V34l4-8 4 8v18h12v-8h4v-6h8v6h4v8h14V46h6v-6h4v6h6v6h12v18z"/></svg>
+</body>
+</html>
