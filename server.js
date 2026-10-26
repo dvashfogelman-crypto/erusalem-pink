@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const path = require('path');
+const fs = require('fs');
 const store = require('./store');
 
 const app = express();
@@ -10,7 +11,12 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'pink2026';
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+// קבצי האתר: בתיקייה public, או ישירות ליד server.js אם הועלו בלי התיקייה
+const PUB = fs.existsSync(path.join(__dirname, 'public', 'index.html')) ? path.join(__dirname, 'public') : __dirname;
+app.get(['/', '/index.html', '/style.css', '/logo.png'], (req, res) => {
+  const name = req.path === '/' ? 'index.html' : req.path.slice(1);
+  res.sendFile(path.join(PUB, name));
+});
 
 const wrap = fn => (req, res) => fn(req, res).catch(err => {
   console.error(err);
@@ -147,7 +153,7 @@ app.get('/api/admin/export', requireAdmin, wrap(async (req, res) => {
   res.send(buf);
 }));
 
-app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+app.get(['/admin', '/admin.html'], (req, res) => res.sendFile(path.join(PUB, 'admin.html')));
 
 store.init().then(() => {
   app.listen(PORT, () => console.log(`ירושלים בורוד פועל על פורט ${PORT} (אחסון: ${store.kind})`));
